@@ -18,6 +18,7 @@ MAX_CONCURRENT_REQUESTS = 3
 REQUEST_TIMEOUT = 20
 RETRY_COUNT = 2
 
+
 # ==========================
 # ROOT
 # ==========================
@@ -59,6 +60,7 @@ async def get_history(
     index_name: str,
     year: str,
     month: str,
+    expiry_day: str,
     strike: str,
     option_type: str
 ):
@@ -71,6 +73,9 @@ async def get_history(
     }
 
     index_name = index_name.upper()
+    month = month.upper()
+    option_type = option_type.upper()
+    expiry_day = expiry_day.zfill(2)
 
     if index_name not in exchange_map:
         return JSONResponse(
@@ -79,13 +84,27 @@ async def get_history(
         )
 
     exchange = exchange_map[index_name]
-    symbol = f"{index_name}{year}{month}{strike}{option_type}"
+
+    # ==========================
+    # DETERMINE SYMBOL FORMAT
+    # ==========================
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+
+    current_year_short = now.strftime("%y")
+    current_month_name = now.strftime("%b").upper()
+
+    if year == current_year_short and month == current_month_name:
+        # CURRENT MONTH → numeric format
+        month_number = str(now.month)  # no leading zero
+        symbol = f"{index_name}{year}{month_number}{expiry_day}{strike}{option_type}"
+    else:
+        # FUTURE MONTH → normal month letters
+        symbol = f"{index_name}{year}{month}{strike}{option_type}"
 
     # ==========================
     # LAST 30 DAYS WINDOW
     # ==========================
-    ist = pytz.timezone("Asia/Kolkata")
-    now = datetime.now(ist)
     past = now - timedelta(days=30)
 
     batches = generate_7day_batches(
@@ -116,6 +135,10 @@ async def get_history(
                 f"&startTimeInMillis={start_ms}"
             )
 
+            print("---------------------------")
+            print("Scheduling batch:", url)
+            print("---------------------------")
+
             tasks.append(fetch_batch(client, semaphore, url))
 
         results = await asyncio.gather(*tasks)
@@ -136,15 +159,9 @@ async def get_history(
             "message": "No candle data found"
         }
 
-    # ==========================
-    # REMOVE DUPLICATES (FAST)
-    # ==========================
     all_candles = list(set(tuple(c) for c in all_candles))
     all_candles.sort(key=lambda x: x[0])
 
-    # ==========================
-    # WAVETREND PROCESSING
-    # ==========================
     signals = process_wavetrend(symbol, all_candles)
 
     return {
