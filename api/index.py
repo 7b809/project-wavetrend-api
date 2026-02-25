@@ -79,7 +79,7 @@ async def get_history(
     expiry_day: str,
     strike: str,
     option_type: str,
-    hard_fetch: bool = False  # ✅ NEW FLAG
+    hard_fetch: bool = False
 ):
 
     exchange_map = {
@@ -119,21 +119,15 @@ async def get_history(
             status_code=400
         )
 
-    # --------------------------
     # HARD FETCH MODE
-    # --------------------------
     if hard_fetch:
         symbol = f"{index_name}{year[-2:]}{user_month_number}{expiry_day}{strike}{option_type}"
 
-    # --------------------------
     # NORMAL MODE
-    # --------------------------
     else:
         if year == current_year_short and user_month_number == current_month_number:
-            # Current month → numeric
             symbol = f"{index_name}{year[-2:]}{user_month_number}{expiry_day}{strike}{option_type}"
         else:
-            # Other month → letter format
             symbol = f"{index_name}{year[-2:]}{month}{strike}{option_type}"
 
     # ==========================
@@ -189,7 +183,7 @@ async def get_history(
             "symbol": symbol,
             "total_candles": 0,
             "total_signals": 0,
-            "signals": [],
+            "signals": {},
             "message": "No candle data found"
         }
 
@@ -198,11 +192,24 @@ async def get_history(
 
     signals = process_wavetrend(symbol, all_candles)
 
+    # ==========================
+    # GROUP SIGNALS DATE-WISE
+    # ==========================
+    signals_by_date = {}
+
+    for sig in signals:
+        date_key = sig.get("date")
+
+        if date_key not in signals_by_date:
+            signals_by_date[date_key] = []
+
+        signals_by_date[date_key].append(sig)
+
     return {
         "symbol": symbol,
         "exchange": exchange,
         "total_batches": len(batches),
         "total_candles": len(all_candles),
         "total_signals": len(signals),
-        "signals": signals
+        "signals": signals_by_date
     }
