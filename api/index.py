@@ -19,6 +19,22 @@ REQUEST_TIMEOUT = 20
 RETRY_COUNT = 2
 
 
+def month_short_or_number(month_short: str):
+    month_short = month_short.strip().upper()
+
+    month_map = {
+        "JAN": 1, "FEB": 2, "MAR": 3,
+        "APR": 4, "MAY": 5, "JUN": 6,
+        "JUL": 7, "AUG": 8, "SEP": 9,
+        "OCT": 10, "NOV": 11, "DEC": 12
+    }
+
+    if month_short not in month_map:
+        raise ValueError("Invalid month short form")
+
+    return month_map[month_short]
+
+
 # ==========================
 # ROOT
 # ==========================
@@ -62,7 +78,8 @@ async def get_history(
     month: str,
     expiry_day: str,
     strike: str,
-    option_type: str
+    option_type: str,
+    hard_fetch: bool = False  # ✅ NEW FLAG
 ):
 
     exchange_map = {
@@ -86,21 +103,38 @@ async def get_history(
     exchange = exchange_map[index_name]
 
     # ==========================
-    # DETERMINE SYMBOL FORMAT
+    # SYMBOL LOGIC
     # ==========================
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
 
     current_year_short = now.strftime("%y")
-    current_month_name = now.strftime("%b").upper()
+    current_month_number = now.month
 
-    if year == current_year_short and month == current_month_name:
-        # CURRENT MONTH → numeric format
-        month_number = str(now.month)  # no leading zero
-        symbol = f"{index_name}{year}{month_number}{expiry_day}{strike}{option_type}"
+    try:
+        user_month_number = month_short_or_number(month)
+    except ValueError:
+        return JSONResponse(
+            {"error": "Invalid month format. Use JAN, FEB, MAR etc."},
+            status_code=400
+        )
+
+    # --------------------------
+    # HARD FETCH MODE
+    # --------------------------
+    if hard_fetch:
+        symbol = f"{index_name}{year[-2:]}{user_month_number}{expiry_day}{strike}{option_type}"
+
+    # --------------------------
+    # NORMAL MODE
+    # --------------------------
     else:
-        # FUTURE MONTH → normal month letters
-        symbol = f"{index_name}{year}{month}{strike}{option_type}"
+        if year == current_year_short and user_month_number == current_month_number:
+            # Current month → numeric
+            symbol = f"{index_name}{year[-2:]}{user_month_number}{expiry_day}{strike}{option_type}"
+        else:
+            # Other month → letter format
+            symbol = f"{index_name}{year[-2:]}{month}{strike}{option_type}"
 
     # ==========================
     # LAST 30 DAYS WINDOW
