@@ -79,7 +79,9 @@ async def get_history(
     expiry_day: str,
     strike: str,
     option_type: str,
-    hard_fetch: bool = False
+    hard_fetch: bool = False,
+    historic_data: bool = False
+    
 ):
 
     exchange_map = {
@@ -191,7 +193,7 @@ async def get_history(
     all_candles.sort(key=lambda x: x[0])
 
     signals = process_wavetrend(symbol, all_candles)
-
+    
     # ==========================
     # GROUP SIGNALS DATE-WISE
     # ==========================
@@ -204,12 +206,16 @@ async def get_history(
             signals_by_date[date_key] = []
 
         signals_by_date[date_key].append(sig)
-
+    candles_data = []
+    
+    if historic_data:
+        candles_data = all_candles
     return {
         "symbol": symbol,
         "exchange": exchange,
         "total_batches": len(batches),
         "total_candles": len(all_candles),
         "total_signals": len(signals),
-        "signals": signals_by_date
+        "signals": signals_by_date,
+        "candles":candles_data
     }
