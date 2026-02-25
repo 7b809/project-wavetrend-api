@@ -80,7 +80,8 @@ async def get_history(
     strike: str,
     option_type: str,
     hard_fetch: bool = False,
-    historic_data: bool = False
+    historic_data: bool = False,
+    reverse_trade: bool = False   # 👈 NEW FLAG
     
 ):
 
@@ -192,8 +193,7 @@ async def get_history(
     all_candles = list(set(tuple(c) for c in all_candles))
     all_candles.sort(key=lambda x: x[0])
 
-    signals = process_wavetrend(symbol, all_candles)
-    
+    signals = process_wavetrend(symbol, all_candles, reverse_trade)    
     # ==========================
     # GROUP SIGNALS DATE-WISE
     # ==========================

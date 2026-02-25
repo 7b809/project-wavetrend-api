@@ -2,7 +2,7 @@ import pandas as pd
 import pytz
 
 
-def process_wavetrend(symbol, candles):
+def process_wavetrend(symbol, candles, reverse_trade=False):
 
     df = pd.DataFrame(candles, columns=[
         "timestamp", "open", "high", "low", "close", "volume"
@@ -23,16 +23,9 @@ def process_wavetrend(symbol, candles):
     df["wt1"] = tci
     df["wt2"] = df["wt1"].rolling(4).mean()
 
-    # ==========================
-    # SIGNAL ENGINE
-    # ==========================
     events = []
-    bull_count = 0
-    bear_count = 0
-
-    last_bull_index = {}
-    last_bull_price = {}
-    last_bull_time = {}
+    trade_count = 0
+    active_trade = None  # will store entry info
 
     for i in range(1, len(df)):
         prev = df.iloc[i - 1]
@@ -42,97 +35,101 @@ def process_wavetrend(symbol, candles):
         bear = curr.wt1 < curr.wt2 and prev.wt1 >= prev.wt2
 
         # ==========================
-        # BULLISH SIGNAL (ENTRY)
+        # DEFINE ENTRY / EXIT
         # ==========================
-        if bull:
-            bull_count += 1
+        if not reverse_trade:
+            entry_signal = bull
+            exit_signal = bear
+            entry_type = "bullish"
+            exit_type = "bearish"
+        else:
+            entry_signal = bear
+            exit_signal = bull
+            entry_type = "bearish"
+            exit_type = "bullish"
 
-            last_bull_index[bull_count] = i
-            last_bull_price[bull_count] = float(curr.close)
-            last_bull_time[bull_count] = curr.datetime
+        # ==========================
+        # ENTRY
+        # ==========================
+        if entry_signal and active_trade is None:
+
+            trade_count += 1
+
+            active_trade = {
+                "index": i,
+                "price": float(curr.close),
+                "time": curr.datetime
+            }
 
             events.append({
                 "symbol": symbol,
-                "type": "bullish",
-                "count": bull_count,
+                "type": entry_type,
+                "count": trade_count,
                 "date": curr.datetime.strftime("%Y-%m-%d"),
                 "time": curr.datetime.strftime("%H:%M"),
-                "price": float(curr.close)
+                "price": float(curr.close),
+                "trade_side": "ENTRY"
             })
 
         # ==========================
-        # BEARISH SIGNAL (EXIT)
+        # EXIT
         # ==========================
-        if bear:
-            bear_count += 1
+        elif exit_signal and active_trade is not None:
 
-            event = {
+            entry_price = active_trade["price"]
+            entry_time = active_trade["time"]
+            entry_index = active_trade["index"]
+
+            exit_price = float(curr.close)
+
+            # Direction aware PnL
+            if not reverse_trade:
+                points = round(exit_price - entry_price, 2)
+            else:
+                points = round(entry_price - exit_price, 2)
+
+            percent = round((points / entry_price) * 100, 2)
+
+            holding_minutes = int(
+                (curr.datetime - entry_time).total_seconds() / 60
+            )
+
+            # Swing data
+            swing_df = df.iloc[entry_index:i+1]
+
+            min_idx = swing_df["low"].idxmin()
+            max_idx = swing_df["high"].idxmax()
+
+            min_price = float(df.loc[min_idx, "low"])
+            max_price = float(df.loc[max_idx, "high"])
+
+            min_time = df.loc[min_idx, "datetime"]
+            max_time = df.loc[max_idx, "datetime"]
+
+            events.append({
                 "symbol": symbol,
-                "type": "bearish",
-                "count": bear_count,
+                "type": exit_type,
+                "count": trade_count,
                 "date": curr.datetime.strftime("%Y-%m-%d"),
                 "time": curr.datetime.strftime("%H:%M"),
-                "price": float(curr.close)
-            }
+                "price": exit_price,
+                "trade_side": "EXIT",
 
-            # Only calculate if matching bullish exists
-            if bear_count in last_bull_index:
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "points": points,
+                "percent": percent,
+                "holding_minutes": holding_minutes,
+                "result": "profit" if points > 0 else "loss",
 
-                entry_price = last_bull_price[bear_count]
-                exit_price = float(curr.close)
-                entry_time = last_bull_time[bear_count]
+                "swing_min": min_price,
+                "swing_min_time": min_time.strftime("%H:%M"),
+                "swing_max": max_price,
+                "swing_max_time": max_time.strftime("%H:%M"),
+                "swing_range": round(max_price - min_price, 2)
+            })
 
-                # ==========================
-                # SWING DATA
-                # ==========================
-                bull_i = last_bull_index[bear_count]
-                swing_df = df.iloc[bull_i:i+1]
-
-                min_idx = swing_df["low"].idxmin()
-                max_idx = swing_df["high"].idxmax()
-
-                min_price = float(df.loc[min_idx, "low"])
-                max_price = float(df.loc[max_idx, "high"])
-
-                min_time = df.loc[min_idx, "datetime"]
-                max_time = df.loc[max_idx, "datetime"]
-
-                # ==========================
-                # PNL CALCULATION
-                # ==========================
-                points = round(exit_price - entry_price, 2)
-                percent = round((points / entry_price) * 100, 2)
-
-                holding_minutes = int(
-                    (curr.datetime - entry_time).total_seconds() / 60
-                )
-
-                time_to_min_minutes = int(
-                    (min_time - entry_time).total_seconds() / 60
-                )
-
-                time_to_max_minutes = int(
-                    (max_time - entry_time).total_seconds() / 60
-                )
-
-                event.update({
-                    "entry_price": entry_price,
-                    "exit_price": exit_price,
-                    "points": points,
-                    "percent": percent,
-                    "holding_minutes": holding_minutes,
-                    "result": "profit" if points > 0 else "loss",
-
-                    "swing_min": min_price,
-                    "swing_min_time": min_time.strftime("%H:%M"),
-                    "swing_max": max_price,
-                    "swing_max_time": max_time.strftime("%H:%M"),
-                    "swing_range": round(max_price - min_price, 2),
-
-                    "time_to_min_minutes": time_to_min_minutes,
-                    "time_to_max_minutes": time_to_max_minutes
-                })
-
-            events.append(event)
+            # Reset trade
+            active_trade = None
 
     return events
