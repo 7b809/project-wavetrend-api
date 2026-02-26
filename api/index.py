@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from services.symbol_service import build_symbol
 from services.groww_fetcher import fetch_last_30_days
 from services.index_fetcher import fetch_index_data
+from services.trade_matcher import match_confirmed_trades
 from wavetrend_processor import process_wavetrend
 
 
@@ -171,3 +172,106 @@ async def get_index_history(
         "signals": signals_by_date,
         "candles": all_candles if historic_data else []
     }    
+    
+  
+@app.get("/api/confirmed-history")
+async def get_confirmed_history(
+    index_name: str,
+    year: str,
+    month: str,
+    expiry_day: str,
+    strike: str,
+    hard_fetch: bool = True,   # ✅ ADD THIS
+    target: float = None
+):
+    try:
+        # ==========================
+        # BUILD CE
+        # ==========================
+        ce_symbol, exchange = build_symbol(
+            index_name=index_name,
+            year=year,
+            month=month,
+            expiry_day=expiry_day,
+            strike=strike,
+            option_type="CE",
+            hard_fetch=hard_fetch
+        )
+
+        # ==========================
+        # BUILD PE
+        # ==========================
+        pe_symbol, _ = build_symbol(
+            index_name=index_name,
+            year=year,
+            month=month,
+            expiry_day=expiry_day,
+            strike=strike,
+            option_type="PE",
+            hard_fetch=hard_fetch
+        )
+
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    # ==========================
+    # FETCH CE
+    # ==========================
+    ce_candles, _ = await fetch_last_30_days(ce_symbol, exchange)
+
+    ce_events = process_wavetrend(
+        ce_symbol,
+        ce_candles,
+        reverse_trade=False,
+        target=target
+    )
+
+    # ==========================
+    # FETCH PE (reverse logic)
+    # ==========================
+    pe_candles, _ = await fetch_last_30_days(pe_symbol, exchange)
+
+    pe_events = process_wavetrend(
+        pe_symbol,
+        pe_candles,
+        reverse_trade=True,
+        target=target
+    )
+
+    # ==========================
+    # FETCH INDEX
+    # ==========================
+    idx_candles, _, idx_symbol, idx_exchange = await fetch_index_data(index_name)
+
+    index_events = process_wavetrend(
+        idx_symbol,
+        idx_candles,
+        reverse_trade=False
+    )
+
+    # ==========================
+    # MATCH TRADES
+    # ==========================
+    confirmed = match_confirmed_trades(
+        ce_events,
+        pe_events,
+        index_events
+    )
+
+    # ==========================
+    # GROUP CONFIRMED TRADES DATE-WISE
+    # ==========================
+    trades_by_date = {}
+
+    for trade in confirmed:
+        date_key = trade["entry"]["date"]
+        trades_by_date.setdefault(date_key, []).append(trade)
+
+    return {
+        "ce_symbol": ce_symbol,
+        "pe_symbol": pe_symbol,
+        "index": idx_symbol,
+        "total_confirmed_trades": len(confirmed),
+        "total_trading_days": len(trades_by_date),
+        "trades": trades_by_date
+    }
