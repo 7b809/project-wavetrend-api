@@ -38,7 +38,9 @@ async def get_history(
     option_type: str,
     hard_fetch: bool = False,
     historic_data: bool = False,
-    reverse_trade: bool = False
+    reverse_trade: bool = False,
+    target: float = None   # 👈 ADD THIS
+    
 ):
     """
     Fetch last 30 days candle data from Groww
@@ -57,7 +59,8 @@ async def get_history(
             expiry_day=expiry_day,
             strike=strike,
             option_type=option_type,
-            hard_fetch=hard_fetch
+            hard_fetch=hard_fetch,
+            
         )
 
     except ValueError as e:
@@ -90,7 +93,9 @@ async def get_history(
     signals = process_wavetrend(
         symbol,
         all_candles,
-        reverse_trade
+        reverse_trade,
+        target=target
+        
     )
 
     # ==========================
@@ -121,7 +126,8 @@ async def get_index_history(
     start_date: str = None,  # format: DD-MM-YYYY
     end_date: str = None,
     historic_data: bool = False,
-    reverse_trade: bool = False
+    reverse_trade: bool = False,
+    target: float = None  
 ):
 
     try:
@@ -148,7 +154,8 @@ async def get_index_history(
     signals = process_wavetrend(
         symbol,
         all_candles,
-        reverse_trade
+        reverse_trade,
+        target=target
     )
 
     signals_by_date = {}

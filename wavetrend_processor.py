@@ -2,7 +2,7 @@ import pandas as pd
 import pytz
 
 
-def process_wavetrend(symbol, candles, reverse_trade=False):
+def process_wavetrend(symbol, candles, reverse_trade=False, target=None):
 
     df = pd.DataFrame(candles, columns=[
         "timestamp", "open", "high", "low", "close", "volume"
@@ -25,7 +25,7 @@ def process_wavetrend(symbol, candles, reverse_trade=False):
 
     events = []
     trade_count = 0
-    active_trade = None  # will store entry info
+    active_trade = None
 
     for i in range(1, len(df)):
         prev = df.iloc[i - 1]
@@ -94,7 +94,36 @@ def process_wavetrend(symbol, candles, reverse_trade=False):
                 (curr.datetime - entry_time).total_seconds() / 60
             )
 
-            # Swing data
+            # ==========================
+            # TARGET CHECK (NEW LOGIC)
+            # ==========================
+            target_hit = False
+            target_price = None
+            target_time = None
+
+            if target:
+                swing_df = df.iloc[entry_index:i+1]
+
+                if not reverse_trade:
+                    # LONG TRADE
+                    possible_hits = swing_df[swing_df["high"] >= entry_price + target]
+                else:
+                    # SHORT TRADE
+                    possible_hits = swing_df[swing_df["low"] <= entry_price - target]
+
+                if not possible_hits.empty:
+                    first_hit = possible_hits.iloc[0]
+                    target_hit = True
+                    target_price = round(
+                        entry_price + target if not reverse_trade
+                        else entry_price - target,
+                        2
+                    )
+                    target_time = first_hit["datetime"].strftime("%H:%M")
+
+            # ==========================
+            # Swing data (original logic)
+            # ==========================
             swing_df = df.iloc[entry_index:i+1]
 
             min_idx = swing_df["low"].idxmin()
@@ -126,10 +155,15 @@ def process_wavetrend(symbol, candles, reverse_trade=False):
                 "swing_min_time": min_time.strftime("%H:%M"),
                 "swing_max": max_price,
                 "swing_max_time": max_time.strftime("%H:%M"),
-                "swing_range": round(max_price - min_price, 2)
+                "swing_range": round(max_price - min_price, 2),
+
+                # NEW TARGET FIELDS
+                "target": target,
+                "target_hit": target_hit,
+                "target_price": target_price,
+                "target_time": target_time
             })
 
-            # Reset trade
             active_trade = None
 
     return events
