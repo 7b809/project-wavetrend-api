@@ -75,3 +75,53 @@ async def fetch_last_30_days(symbol: str, exchange: str):
     all_candles.sort(key=lambda x: x[0])
 
     return all_candles, len(batches)
+
+async def fetch_last_5_minutes(symbol: str, exchange: str):
+    """
+    Fetch last 5 minutes 1-min interval candles
+    Returns:
+        candles (list),
+        total_minutes (int)
+    """
+
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+
+    # Round to current minute
+    now = now.replace(second=0, microsecond=0)
+
+    past = now - timedelta(minutes=5)
+
+    start_ms = int(past.timestamp() * 1000)
+    end_ms = int(now.timestamp() * 1000)
+
+    url = (
+        f"https://groww.in/v1/api/stocks_fo_data/v1/charting_service/"
+        f"delayed/chart/exchange/{exchange}/segment/FNO/{symbol}"
+        f"?endTimeInMillis={end_ms}"
+        f"&intervalInMinutes=1"
+        f"&startTimeInMillis={start_ms}"
+    )
+
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(headers=headers) as client:
+        try:
+            response = await client.get(url, timeout=REQUEST_TIMEOUT)
+
+            if response.status_code == 200:
+                data = response.json()
+                candles = data.get("candles", [])
+
+                # Sort just in case
+                candles.sort(key=lambda x: x[0])
+
+                return candles, len(candles)
+
+        except Exception:
+            pass
+
+    return [], 0
