@@ -25,6 +25,76 @@ async def root():
         "status": "WaveTrend API Running (Optimized + Modular)"
     }
 
+# ==========================
+# HISTORY API
+# ==========================
+@app.get("/api/history-data")
+async def get_history(
+    index_name: str,
+    year: str,
+    month: str,
+    expiry_day: str,
+    strike: str,
+    option_type: str,
+   
+    
+):
+    """
+    Fetch last 30 days candle data from Groww
+    Process WaveTrend signals
+    Return grouped signals date-wise
+    """
+
+    # ==========================
+    # BUILD SYMBOL
+    # ==========================
+    try:
+        symbol, exchange = build_symbol(
+            index_name=index_name,
+            year=year,
+            month=month,
+            expiry_day=expiry_day,
+            strike=strike,
+            option_type=option_type,
+            
+        )
+
+    except ValueError as e:
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=400
+        )
+
+    # ==========================
+    # FETCH CANDLES
+    # ==========================
+    all_candles, total_batches = await fetch_last_30_days(
+        symbol=symbol,
+        exchange=exchange
+    )
+
+    if not all_candles:
+        return {
+            "symbol": symbol,
+            "exchange": exchange,
+            "total_candles": 0,
+            "total_signals": 0,
+            "signals": {},
+            "message": "No candle data found"
+        }
+
+  
+    # ==========================
+    # RESPONSE
+    # ==========================
+    return {
+        "symbol": symbol,
+        "exchange": exchange,
+        "total_batches": total_batches,
+        "total_candles": len(all_candles),
+        "candles": all_candles if all_candles else []
+    }
+
 
 # ==========================
 # HISTORY API

@@ -19,7 +19,7 @@ def month_short_to_number(month_short: str):
     return month_map[month_short]
 
 
-def build_symbol(index_name, year, month, expiry_day, strike, option_type, hard_fetch):
+def build_symbol(index_name, year, month, expiry_day, strike, option_type, hard_fetch=True):
 
     exchange_map = {
         "NIFTY": "NSE",
