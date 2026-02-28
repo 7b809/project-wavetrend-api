@@ -36,8 +36,9 @@ async def root():
         "status": "WaveTrend API Running (Optimized + Modular)"
     }
 
+
 # ==========================
-# HISTORY API
+# HISTORY API (OPTIONS)
 # ==========================
 @app.get("/api/history-data")
 async def get_history(
@@ -47,6 +48,7 @@ async def get_history(
     expiry_day: str,
     strike: str,
     option_type: str,
+    instrument_type:str = "o",
     test_data: bool = False
 ):
     """
@@ -60,36 +62,45 @@ async def get_history(
         test_day_candles = []
 
     If test_data=True:
-        last 1 day → test_day_candles
-        remaining → candles
+        Last trading day candles → test_day_candles
+        Remaining candles → candles
     """
+    if not instrument_type =='o':
+        # ==========================
+        # BUILD SYMBOL
+        # ==========================
+        try:
+            symbol, exchange = build_symbol(
+                index_name=index_name,
+                year=year,
+                month=month,
+                expiry_day=expiry_day,
+                strike=strike,
+                option_type=option_type,
+            )
 
-    # ==========================
-    # BUILD SYMBOL
-    # ==========================
-    try:
-        symbol, exchange = build_symbol(
-            index_name=index_name,
-            year=year,
-            month=month,
-            expiry_day=expiry_day,
-            strike=strike,
-            option_type=option_type,
+        except ValueError as e:
+            return JSONResponse(
+                {"error": str(e)},
+                status_code=400
+            )
+
+        # ==========================
+        # FETCH CANDLES
+        # ==========================
+        all_candles, total_batches = await fetch_last_30_days(
+            symbol=symbol,
+            exchange=exchange
         )
-    except ValueError as e:
-        return JSONResponse(
-            {"error": str(e)},
-            status_code=400
-        )
+    else:
+        try:
+            all_candles, total_batches, symbol, exchange = await fetch_index_data(
+                index_name=index_name,
+            )
 
-    # ==========================
-    # FETCH CANDLES
-    # ==========================
-    all_candles, total_batches = await fetch_last_30_days(
-        symbol=symbol,
-        exchange=exchange
-    )
-
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+            
     if not all_candles:
         return {
             "symbol": symbol,
@@ -105,16 +116,17 @@ async def get_history(
     test_day_candles = []
 
     # ==========================
-    # SPLIT IF TEST MODE ENABLED
+    # SPLIT LOGIC (IST AWARE)
     # ==========================
     if test_data:
 
-        last_timestamp = all_candles[-1][0]
+        ist = ZoneInfo("Asia/Kolkata")
 
-        # timezone-aware UTC date
+        # Get last candle IST date
+        last_timestamp = all_candles[-1][0]
         last_date = datetime.fromtimestamp(
             last_timestamp,
-            tz=timezone.utc
+            tz=ist
         ).date()
 
         candles_data = []
@@ -123,7 +135,7 @@ async def get_history(
         for candle in all_candles:
             candle_date = datetime.fromtimestamp(
                 candle[0],
-                tz=timezone.utc
+                tz=ist
             ).date()
 
             if candle_date == last_date:
@@ -132,7 +144,7 @@ async def get_history(
                 candles_data.append(candle)
 
     # ==========================
-    # FINAL RESPONSE (ALWAYS SAME FORMAT)
+    # FINAL RESPONSE
     # ==========================
     return {
         "symbol": symbol,
@@ -142,7 +154,7 @@ async def get_history(
         "candles": candles_data,
         "test_day_candles": test_day_candles
     }
-
+    
 # ==========================
 # HISTORY API
 # ==========================
