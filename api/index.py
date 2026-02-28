@@ -1,5 +1,6 @@
 # api/index.py
-from datetime import datetime,timezone
+from datetime import datetime,timezone,time
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -25,11 +26,6 @@ async def root():
     return {
         "status": "WaveTrend API Running (Optimized + Modular)"
     }
-
-# ==========================
-# HISTORY API
-# ==========================
-from datetime import datetime, timezone
 
 # ==========================
 # ROOT
@@ -147,7 +143,6 @@ async def get_history(
         "test_day_candles": test_day_candles
     }
 
-
 # ==========================
 # HISTORY API
 # ==========================
@@ -162,13 +157,16 @@ async def get_history(
     hard_fetch: bool = False,
     historic_data: bool = False,
     reverse_trade: bool = False,
-    target: float = None   # 👈 ADD THIS
-    
+    target: float = None
 ):
     """
     Fetch last 30 days candle data from Groww
     Process WaveTrend signals
     Return grouped signals date-wise
+
+    If historic_data=True:
+        Returns only last trading day candles
+        Between 09:15–15:30 IST
     """
 
     # ==========================
@@ -183,7 +181,6 @@ async def get_history(
             strike=strike,
             option_type=option_type,
             hard_fetch=hard_fetch,
-            
         )
 
     except ValueError as e:
@@ -207,6 +204,7 @@ async def get_history(
             "total_candles": 0,
             "total_signals": 0,
             "signals": {},
+            "candles": [],
             "message": "No candle data found"
         }
 
@@ -218,7 +216,6 @@ async def get_history(
         all_candles,
         reverse_trade,
         target=target
-        
     )
 
     # ==========================
@@ -231,7 +228,35 @@ async def get_history(
         signals_by_date.setdefault(date_key, []).append(sig)
 
     # ==========================
-    # RESPONSE
+    # FILTER LAST DAY CANDLES (IST 09:15–15:30)
+    # ==========================
+    filtered_last_day_candles = []
+
+    if historic_data:
+
+        ist = ZoneInfo("Asia/Kolkata")
+
+        # Get last candle IST date
+        last_timestamp = all_candles[-1][0]
+        last_date = datetime.fromtimestamp(
+            last_timestamp,
+            tz=ist
+        ).date()
+
+        for candle in all_candles:
+            dt = datetime.fromtimestamp(
+                candle[0],
+                tz=ist
+            )
+
+            if (
+                dt.date() == last_date and
+                time(9, 15) <= dt.time() <= time(15, 30)
+            ):
+                filtered_last_day_candles.append(candle)
+
+    # ==========================
+    # FINAL RESPONSE
     # ==========================
     return {
         "symbol": symbol,
@@ -240,9 +265,10 @@ async def get_history(
         "total_candles": len(all_candles),
         "total_signals": len(signals),
         "signals": signals_by_date,
-        "candles": all_candles if historic_data else []
+        "candles": filtered_last_day_candles if historic_data else []
     }
-
+    
+    
 @app.get("/api/index-history")
 async def get_index_history(
     index_name: str,
