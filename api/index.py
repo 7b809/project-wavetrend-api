@@ -1,4 +1,5 @@
 # api/index.py
+from datetime import datetime,timezone
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -28,6 +29,20 @@ async def root():
 # ==========================
 # HISTORY API
 # ==========================
+from datetime import datetime, timezone
+
+# ==========================
+# ROOT
+# ==========================
+@app.get("/")
+async def root():
+    return {
+        "status": "WaveTrend API Running (Optimized + Modular)"
+    }
+
+# ==========================
+# HISTORY API
+# ==========================
 @app.get("/api/history-data")
 async def get_history(
     index_name: str,
@@ -36,13 +51,21 @@ async def get_history(
     expiry_day: str,
     strike: str,
     option_type: str,
-   
-    
+    test_data: bool = False
 ):
     """
     Fetch last 30 days candle data from Groww
-    Process WaveTrend signals
-    Return grouped signals date-wise
+
+    Always returns:
+        - candles
+        - test_day_candles
+
+    If test_data=False:
+        test_day_candles = []
+
+    If test_data=True:
+        last 1 day → test_day_candles
+        remaining → candles
     """
 
     # ==========================
@@ -56,9 +79,7 @@ async def get_history(
             expiry_day=expiry_day,
             strike=strike,
             option_type=option_type,
-            
         )
-
     except ValueError as e:
         return JSONResponse(
             {"error": str(e)},
@@ -77,22 +98,53 @@ async def get_history(
         return {
             "symbol": symbol,
             "exchange": exchange,
+            "total_batches": total_batches,
             "total_candles": 0,
-            "total_signals": 0,
-            "signals": {},
-            "message": "No candle data found"
+            "candles": [],
+            "test_day_candles": []
         }
 
-  
+    # Default values
+    candles_data = all_candles
+    test_day_candles = []
+
     # ==========================
-    # RESPONSE
+    # SPLIT IF TEST MODE ENABLED
+    # ==========================
+    if test_data:
+
+        last_timestamp = all_candles[-1][0]
+
+        # timezone-aware UTC date
+        last_date = datetime.fromtimestamp(
+            last_timestamp,
+            tz=timezone.utc
+        ).date()
+
+        candles_data = []
+        test_day_candles = []
+
+        for candle in all_candles:
+            candle_date = datetime.fromtimestamp(
+                candle[0],
+                tz=timezone.utc
+            ).date()
+
+            if candle_date == last_date:
+                test_day_candles.append(candle)
+            else:
+                candles_data.append(candle)
+
+    # ==========================
+    # FINAL RESPONSE (ALWAYS SAME FORMAT)
     # ==========================
     return {
         "symbol": symbol,
         "exchange": exchange,
         "total_batches": total_batches,
         "total_candles": len(all_candles),
-        "candles": all_candles if all_candles else []
+        "candles": candles_data,
+        "test_day_candles": test_day_candles
     }
 
 
