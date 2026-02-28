@@ -27,14 +27,6 @@ async def root():
         "status": "WaveTrend API Running (Optimized + Modular)"
     }
 
-# ==========================
-# ROOT
-# ==========================
-@app.get("/")
-async def root():
-    return {
-        "status": "WaveTrend API Running (Optimized + Modular)"
-    }
 
 
 # ==========================
@@ -65,7 +57,7 @@ async def get_history(
         Last trading day candles → test_day_candles
         Remaining candles → candles
     """
-    if not instrument_type =='o':
+    if instrument_type =='o':
         # ==========================
         # BUILD SYMBOL
         # ==========================
