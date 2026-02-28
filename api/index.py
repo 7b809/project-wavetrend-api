@@ -34,12 +34,12 @@ async def root():
 # ==========================
 @app.get("/api/history-data")
 async def get_history(
-    index_name: str,
-    year: str,
-    month: str,
-    expiry_day: str,
-    strike: str,
-    option_type: str,
+    index_name: str="",
+    year: str="",
+    month: str="",
+    expiry_day: str="",
+    strike: str="",
+    option_type: str="",
     instrument_type:str = "o",
     test_data: bool = False
 ):
