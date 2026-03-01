@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from services.symbol_service import build_symbol
 from services.groww_fetcher import fetch_last_30_days
@@ -18,6 +19,16 @@ app = FastAPI(
 )
 
 
+# ==========================
+# CORS CONFIGURATION
+# ==========================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],   # Allow all HTTP methods
+    allow_headers=["*"],   # Allow all headers
+)
 # ==========================
 # ROOT
 # ==========================
