@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 
 from services.symbol_service import build_symbol
 from services.groww_fetcher import fetch_last_30_days
@@ -438,3 +439,77 @@ async def get_confirmed_history(
         "total_trading_days": len(trades_by_date),
         "trades": trades_by_date
     }
+    
+
+@app.get("/routes")
+async def list_routes():
+
+    base_url = ""  # optional: add domain if deployed
+
+    example_values = {
+        "index_name": "NIFTY",
+        "year": "26",
+        "month": "03",
+        "expiry_day": "20",
+        "strike": "22500",
+        "option_type": "CE",
+        "instrument_type": "o",
+        "test_data": "true",
+        "historic_data": "true",
+        "reverse_trade": "false",
+        "hard_fetch": "false",
+        "target": "100",
+        "start_date": "01-01-2024",
+        "end_date": "01-02-2024"
+    }
+
+    routes = {}
+
+    for route in app.routes:
+
+        if not isinstance(route, APIRoute):
+            continue
+
+        module = route.endpoint.__module__.split(".")[-1]
+
+        if module not in routes:
+            routes[module] = []
+
+        params = []
+        query_string = []
+
+        for p in route.dependant.query_params:
+
+            param_info = {
+                "name": p.name,
+                "required": p.required,
+                "type": str(p.type_)
+            }
+
+            params.append(param_info)
+
+            if p.name in example_values:
+                query_string.append(
+                    f"{p.name}={example_values[p.name]}"
+                )
+            else:
+                query_string.append(
+                    f"{p.name}=value"
+                )
+
+        example_url = route.path
+
+        if query_string:
+            example_url += "?" + "&".join(query_string)
+
+        routes[module].append({
+            "path": route.path,
+            "methods": list(route.methods),
+            "parameters": params,
+            "example": base_url + example_url
+        })
+
+    return {
+        "total_modules": len(routes),
+        "routes": routes
+    }    
